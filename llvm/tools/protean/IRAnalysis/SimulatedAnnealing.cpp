@@ -585,7 +585,7 @@ double SimulatedAnnealingProtean::temperature(int Iteration) {
     CoolingRate = pow(MinTemperature / MaxTemperature, 1.0 / (MaxIterations));
     return MaxTemperature * pow(CoolingRate, Iteration);
   case CoolingType::Linear:
-    CoolingRate = (MinTemperature + MaxTemperature) / MaxIterations;
+    CoolingRate = (MaxTemperature - MinTemperature) / MaxIterations;
     return this->MaxTemperature - this->CoolingRate * Iteration;
   default:
     llvm_unreachable("Not a valid cooling schedule");
