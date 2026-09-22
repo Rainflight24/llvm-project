@@ -600,6 +600,10 @@ double SimulatedAnnealingProtean::irAnalysisCost(
   float Cost = 1;
   std::optional<std::string> BishengAcpoDir =
       llvm::sys::Process::GetEnv("BISHENG_ACPO_DIR");
+
+  // TODO: gracefully exit earlier in the compile pipeline so this never needs
+  // to run.
+  assert(BishengAcpoDir && "BISHENG_ACPO_DIR missing");
   if (!BishengAcpoDir) {
     llvm::errs() << "Please Export BISHENG_ACPO_DIR\n";
     return -1;
