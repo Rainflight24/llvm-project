@@ -198,13 +198,6 @@ static const char *appendToString(const char *original,
   return NewBuf;
 }
 
-std::string formatDouble(double Num, int Precision) {
-  if (Precision == 0)
-    Precision -= 1;
-  std::string D = std::to_string(Num);
-  return D.substr(0, D.find_last_of(".") + Precision + 1);
-}
-
 int createSharedMemory(const char *shm_name, size_t shm_size,
                        void **shared_memory, bool ModLevelIPC) {
   int shm_fd = shm_open(shm_name, O_CREAT | O_RDWR, 0666);
@@ -540,15 +533,12 @@ void SimulatedAnnealingProtean::run() {
 
     if (ProteanOutputTable) {
       std::stringstream ss;
-      ss << std::setw(9) << Iteration 
-         << std::setw(20) << stateToString(SBefore) 
-         << std::setw(20) << stateToString(SNew) 
-         << std::setw(20) << stateToString(getFinalState())
-         << std::setw(20) << formatDouble(cost(SBefore), 6) 
-         << std::setw(20) << formatDouble(cost(SNew), 6) 
-         << std::setw(20) << formatDouble(cost(getFinalState()), 6) 
-         << std::setw(20) << formatDouble(Temp, 3)
-         << "\n";
+      ss << std::setw(9) << Iteration << std::setw(20) << stateToString(SBefore)
+         << std::setw(20) << stateToString(SNew) << std::setw(20)
+         << stateToString(getFinalState()) << std::setprecision(10)
+         << std::fixed << std::setw(20) << cost(SBefore) << std::setw(20)
+         << cost(SNew) << std::setw(20) << cost(getFinalState())
+         << std::setw(20) << Temp << "\n";
       llvm::dbgs() << ss.str();
     }
 
@@ -639,6 +629,7 @@ double SimulatedAnnealingProtean::irAnalysisCost(
 
     if (moduleOrErr) {
       M = std::move(moduleOrErr.get());
+
       LLVM_DEBUG(llvm::dbgs() << "Module read from shared memory.\n");
     } else {
       llvm::errs() << "Error reading module: "
@@ -677,8 +668,7 @@ double SimulatedAnnealingProtean::irAnalysisCost(
     }
     if (Features.empty()) {
       llvm::errs() << "No features read from shared memory for recipe "
-                     << RecipeStr << "\n";
-
+                   << RecipeStr << "\n";
       return -1;
     }
   }
