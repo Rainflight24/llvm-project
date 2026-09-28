@@ -1307,20 +1307,22 @@ std::vector<std::string> ProteanCollectFeatures::getAllFeatures() {
   std::vector<std::string> FunctionLevel;
   std::vector<std::string> LoopLevel;
 
-  for (const auto &Info : ProteanCollectFeatures::FeatureIndexToName) {
-    auto ScopeIter = FeatureIndexToScope.find(Info.first);
+  for (auto Idx = FeatureIndex::InlineCostFeatureGroupBegin;
+       Idx != FeatureIndex::NumOfFeatures; ++Idx) {
+    const auto NameIter = ProteanCollectFeatures::FeatureIndexToName.find(Idx);
+    auto ScopeIter = FeatureIndexToScope.find(Idx);
     if (ScopeIter == FeatureIndexToScope.end()) {
       continue;
     }
     if (ScopeIter->second == ProteanCollectFeatures::Scope::Module) {
-      ModuleLevel.push_back(Info.second);
+      ModuleLevel.push_back(NameIter->second);
     } else if (ScopeIter->second == ProteanCollectFeatures::Scope::Function) {
-      FunctionLevel.push_back("callee_" + Info.second);
-      FunctionLevel.push_back("caller_" + Info.second);
+      FunctionLevel.push_back("callee_" + NameIter->second);
+      FunctionLevel.push_back("caller_" + NameIter->second);
     } else if (ScopeIter->second == ProteanCollectFeatures::Scope::CallSite) {
-      FunctionLevel.push_back(Info.second);
+      FunctionLevel.push_back(NameIter->second);
     } else if (ScopeIter->second == ProteanCollectFeatures::Scope::Loop) {
-      LoopLevel.push_back(Info.second);
+      LoopLevel.push_back(NameIter->second);
     }
   }
   Res.insert(Res.end(), ModuleLevel.begin(), ModuleLevel.end());
