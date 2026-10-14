@@ -1,4 +1,5 @@
-; RUN: opt -passes=protean-collect-features --enable-protean-feature-dump --protean-dump-file=%t --protean-loop-dump-file=%t < %s 
+; RUN: rm -f %t
+; RUN: opt -passes=protean-collect-features --enable-protean-feature-dump --protean-dump-file=%t --protean-loop-dump-file=%t < %s
 ; RUN: cat %t | FileCheck %s
 @.str = private unnamed_addr constant [14 x i8] c"loop count %d\00", align 1
 
