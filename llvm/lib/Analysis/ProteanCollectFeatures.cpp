@@ -1740,7 +1740,7 @@ void calculateHotColdCallSite(ProteanCollectFeatures &ACF,
       CallerBFI.getBlockFreq(&(CB->getCaller()->getEntryBlock()));
   bool ColdCallSite = CallSiteFreq < CallerEntryFreq * ColdProb;
   auto CallerEntryFreqHot = CallerBFI.getEntryFreq().getFrequency();
-  bool HotCallSite = (CallSiteFreq.getFrequency() >= CallerEntryFreqHot * 60);
+  bool HotCallSite = (CallSiteFreq.getFrequency() / 60 >= CallerEntryFreqHot);
 
   ACF.setFeatureValueAndInfo(ProteanCollectFeatures::FeatureIndex::ColdCallSite,
                              Info, std::to_string(ColdCallSite));
