@@ -2452,19 +2452,16 @@ void calculateLoopSize(ProteanCollectFeatures &ACF,
     Metrics.analyzeBasicBlock(BB, TTI, EphValues);
   InstructionCost LoopSize = Metrics.NumInsts;
 
-  // Don't allow an estimate of size zero. This would allows unrolling of loops
-  // with huge iteration counts, which is a compile time problem even if it's
-  // not a problem for code quality. Also, the code using this size may assume
-  // that each loop has at least three instructions (likely a conditional
-  // branch, a comparison feeding that branch, and some kind of loop increment
-  // feeding that comparison instruction).
   if (LoopSize.isValid() && *LoopSize.getValue() < BEInsns + 1) {
     // This is an open coded max() on InstructionCost
     LoopSize = BEInsns + 1;
   }
 
+  std::string Val =
+      LoopSize.isValid() ? std::to_string(*LoopSize.getValue()) : "0";
+
   ACF.setFeatureValueAndInfo(ProteanCollectFeatures::FeatureIndex::LoopSize,
-                             Info, std::to_string(*LoopSize.getValue()));
+                             Info, Val);
 }
 
 void calculateIsIndirectCall(ProteanCollectFeatures &ACF,
