@@ -2238,16 +2238,22 @@ void calculateLoopInstFeatures(
   std::vector<Loop *> SL = L->getSubLoops();
   if (!SL.empty()) {
     for (auto *LB : L->getBlocks()) {
-      for (auto *BBSL : SL) {
-        if (!BBSL->contains(LB)) {
-          TotBlocksPerLoop++;
-          for (Instruction &Inst : *LB) {
-            TotLoopInstCount++;
-            if (isa<LoadInst>(Inst))
-              NumLoadInstPerLoop++;
-            if (isa<StoreInst>(Inst))
-              NumStoreInstPerLoop++;
-          }
+      bool NotInSubLoop = true;
+      for (auto *SubSL : SL) {
+        if (SubSL->contains(LB)) {
+          NotInSubLoop = false;
+          break;
+        }
+      }
+
+      if (NotInSubLoop) {
+        TotBlocksPerLoop++;
+        for (Instruction &Inst : *LB) {
+          TotLoopInstCount++;
+          if (isa<LoadInst>(Inst))
+            NumLoadInstPerLoop++;
+          if (isa<StoreInst>(Inst))
+            NumStoreInstPerLoop++;
         }
       }
     }
