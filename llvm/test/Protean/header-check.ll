@@ -38,9 +38,9 @@ for.end:
 ; CHECK: [[HEADER:.*]]||||
 ; CHECK-NEXT: [[HEADER]]|main|callee|main|
 ; CHECK-NEXT: [[HEADER]]|main|||for.cond
-; CHECK: Protean Feature node_count: 2
-; CHECK: Protean Feature average_calls_per_function: 1.500000
-; CHECK: Protean Feature InstructionPerBlock: 1.000000
-; CHECK: Protean Feature scc_size: 1
-; CHECK: Protean Feature IsInnerMostLoop: 1
-; CHECK: Protean Feature IsOuterMostLoop: 1
+; CHECK-DAG: Protean Feature node_count: 2
+; CHECK-DAG: Protean Feature average_calls_per_function: 0.500000
+; CHECK-DAG: Protean Feature InstructionPerBlock: 1.000000
+; CHECK-DAG: Protean Feature scc_size: 1
+; CHECK-DAG: Protean Feature IsInnerMostLoop: 1
+; CHECK-DAG: Protean Feature IsOuterMostLoop: 1

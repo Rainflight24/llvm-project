@@ -1618,16 +1618,22 @@ void calculateModuleInfoCount(ProteanCollectFeatures &ACF,
             }
           }
         }
-        BBCount += std::distance(F.begin(), F.end());
-        CallsPerFunction.push_back(FunctionCalls);
       }
+      BBCount += std::distance(F.begin(), F.end());
+      CallsPerFunction.push_back(FunctionCalls);
     }
   }
   // Function Calls Analysis
   std::sort(CallsPerFunction.begin(), CallsPerFunction.end());
-  int MedianCallsPerFunction = 0;
+  double MedianCallsPerFunction = 0;
   if (!CallsPerFunction.empty()) {
-    MedianCallsPerFunction = CallsPerFunction[FunctionCount / 2];
+    if (FunctionCount % 2 == 0)
+      MedianCallsPerFunction =
+          (static_cast<double>(CallsPerFunction[FunctionCount / 2 - 1]) +
+           CallsPerFunction[FunctionCount / 2]) /
+          2;
+    else
+      MedianCallsPerFunction = CallsPerFunction[FunctionCount / 2];
   }
   int TotalFunctionCalls = 0;
   for (int Calls : CallsPerFunction) {
