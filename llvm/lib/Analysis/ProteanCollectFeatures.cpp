@@ -2146,7 +2146,7 @@ void calculateIVValueFeatures(ProteanCollectFeatures &ACF,
   auto &SE = AR->SE;
   auto *IndVar = L->getInductionVariable(SE);
 
-  int InitialIVValueInt = 0, FinalIVValueInt = 0, StepValueInt = 0;
+  int64_t InitialIVValueInt = 0, FinalIVValueInt = 0, StepValueInt = 0;
   if (auto LoopBound = L->getBounds(SE)) {
     if (auto Bound = LoopBound->getBounds(*L, *IndVar, SE)) {
       Value &InitialIVValue = Bound->getInitialIVValue();
