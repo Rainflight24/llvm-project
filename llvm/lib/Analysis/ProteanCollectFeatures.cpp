@@ -2312,7 +2312,7 @@ void calculateLoopHeight(ProteanCollectFeatures &ACF,
   while (!SLoops.empty()) {
     unsigned Size = SLoops.size();
     for (unsigned I = 0; I < Size; ++I) {
-      Loop *VisitingLoop = SLoops.back();
+      Loop *VisitingLoop = SLoops.front();
       SLoops.pop();
       for (auto *ChildLoop : VisitingLoop->getSubLoops())
         SLoops.push(ChildLoop);
