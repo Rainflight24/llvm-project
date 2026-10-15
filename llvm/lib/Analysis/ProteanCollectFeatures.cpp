@@ -2543,14 +2543,8 @@ void calculateIsInInnerLoop(ProteanCollectFeatures &ACF,
   auto &Caller = *CB->getCaller();
   auto &CallerLI = FAM->getResult<LoopAnalysis>(Caller);
 
-  // Get loop for CB's BB. And check whether the loop is an inner most loop.
-  bool CallSiteInInnerLoop = false;
-  for (auto &L : CallerLI) {
-    if (L->isInnermost() && L->contains(CB)) {
-      CallSiteInInnerLoop = true;
-      break;
-    }
-  }
+  auto *L = CallerLI.getLoopFor(CB->getParent());
+  bool CallSiteInInnerLoop = L && L->isInnermost();
 
   ACF.setFeatureValueAndInfo(
       ProteanCollectFeatures::FeatureIndex::IsInInnerLoop, Info,
@@ -2875,12 +2869,21 @@ void ProteanFIExtendedFeatures::updateLoopRelatedFeatures(
 
   uint64_t LoopInstrCount = 0;
   uint64_t BlockWithMulSuccNum = 0;
+
+  // Depth metrics must include nested loops.
+  auto AllLoops = LI.getLoopsInPreorder();
   uint64_t LoopLevelSum = 0;
-  for (auto &L : LI) {
+  for (const Loop *L : AllLoops) {
     LoopLevelSum += static_cast<uint64_t>(L->getLoopDepth());
     FF[NamedFeatureIndex::MaxLoopDepth] =
         std::max(FF[NamedFeatureIndex::MaxLoopDepth],
                  static_cast<uint64_t>(L->getLoopDepth()));
+  }
+  if (!AllLoops.empty())
+    FF[NamedFloatFeatureIndex::AvgNestedLoopLevel] =
+        static_cast<float>(LoopLevelSum) / AllLoops.size();
+
+  for (auto &L : LI) {
     for (const BasicBlock *BB : L->getBlocks()) {
       unsigned SuccCount = std::distance(succ_begin(BB), succ_end(BB));
       if (SuccCount > 1)
@@ -2898,9 +2901,6 @@ void ProteanFIExtendedFeatures::updateLoopRelatedFeatures(
     q = BlockWithMulSuccNum / LoopNum;
     FF[NamedFloatFeatureIndex::BlockWithMultipleSuccessorsPerLoop] =
         q + ((float)(BlockWithMulSuccNum - q * LoopNum)) / LoopNum;
-    q = LoopLevelSum / LoopNum;
-    FF[NamedFloatFeatureIndex::AvgNestedLoopLevel] =
-        q + ((float)(LoopLevelSum - q * LoopNum)) / LoopNum;
   }
 }
 
