@@ -1508,9 +1508,9 @@ void calculateEdgeNodeCount(ProteanCollectFeatures &ACF,
   int NodeCount = 0;
   int EdgeCount = 0;
   for (auto &F : *M) {
-    bool Cond =
-        (F.isDeclaration()) || ((F.size() == 1) && (F.front().size() == 1) &&
-                                (isa<UnreachableInst>(F.front().front())));
+    bool Cond = (F.isDeclaration()) ||
+                ((F.size() == 1) && (F.front().sizeWithoutDebug() == 1) &&
+                 (isa<UnreachableInst>(F.front().getTerminator())));
     if (!Cond) {
       ++NodeCount;
       EdgeCount += getLocalCalls(F, *FAM);
@@ -1589,7 +1589,7 @@ void calculateModuleInfoCount(ProteanCollectFeatures &ACF,
       LoopInfo &LI = FAM->getResult<LoopAnalysis>(F);
       LoopCount += std::distance(LI.begin(), LI.end());
       for (BasicBlock &BB : F) {
-        InstructionCount += std::distance(BB.begin(), BB.end());
+        InstructionCount += BB.sizeWithoutDebug();
         TotalEdgeCount +=
             std::distance(successors(&BB).begin(), successors(&BB).end());
         for (Instruction &I : BB) {
@@ -2222,7 +2222,7 @@ void calculateLoopInstFeatures(
   int TotBlocksPerLoopNest = 0;
   for (auto *LB : L->getBlocks()) {
     TotBlocksPerLoopNest++;
-    for (Instruction &Inst : *LB) {
+    for (Instruction &Inst : LB->instructionsWithoutDebug()) {
       TotLoopNestInstCount++;
       if (isa<LoadInst>(Inst))
         NumLoadInstPerLoopNest++;
@@ -2253,7 +2253,7 @@ void calculateLoopInstFeatures(
 
       if (NotInSubLoop) {
         TotBlocksPerLoop++;
-        for (Instruction &Inst : *LB) {
+        for (Instruction &Inst : LB->instructionsWithoutDebug()) {
           TotLoopInstCount++;
           if (isa<LoadInst>(Inst))
             NumLoadInstPerLoop++;

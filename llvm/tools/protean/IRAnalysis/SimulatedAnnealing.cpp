@@ -808,7 +808,7 @@ double SimulatedAnnealingProtean::instructionCountCost(
   int Instructions = 0;
   for (auto &F : *M) {
     for (auto &BB : F) {
-      Instructions += BB.size();
+      Instructions += BB.sizeWithoutDebug();
     }
   }
   CostMap[RecipeStr] = Instructions;
