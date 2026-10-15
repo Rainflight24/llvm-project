@@ -15,6 +15,7 @@
 #include "llvm/Analysis/ProteanCollectFeatures.h"
 #include "llvm/ADT/EnumeratedArray.h"
 #include "llvm/ADT/SCCIterator.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/AssumptionCache.h"
 #include "llvm/Analysis/BlockFrequencyInfo.h"
@@ -93,6 +94,24 @@ namespace llvm {
 static cl::opt<bool> FeatureDump("enable-protean-feature-dump", cl::init(false));
 static cl::opt<bool> EnableLoopCollectFeature("enable-loop-collect-feature",
                                               cl::init(false));
+
+// Escape identifiers before assembling internal CSV.
+static std::string encodeIdentifier(StringRef Identifier) {
+  static constexpr char HexDigits[] = "0123456789ABCDEF";
+  std::string Encoded;
+  for (unsigned char C : Identifier) {
+    if (C == '%' || C == ',' || C == '|' || C == '"' || C == '\r' ||
+        C == '\n' || (C == '-' && Encoded.empty())) {
+      // A leading '-' would otherwise be interpreted as a header marker.
+      Encoded += '%';
+      Encoded += HexDigits[C >> 4];
+      Encoded += HexDigits[C & 0xF];
+    } else {
+      Encoded += C;
+    }
+  }
+  return Encoded;
+}
 
 class ModelDataProteanCollector : public ModelDataCollector {
 public:
@@ -201,17 +220,17 @@ public:
       return;
     }
     std::string Out = "";
-    Out += M->getName().str() + ",";
+    Out += encodeIdentifier(M->getName()) + ",";
     if (F)
-      Out += F->getName().str() + ",";
+      Out += encodeIdentifier(F->getName()) + ",";
     if (CB)
-      Out += CB->getCalledFunction()->getName().str() + "," +
-             CB->getCaller()->getName().str() + ",";
+      Out += encodeIdentifier(CB->getCalledFunction()->getName()) + "," +
+             encodeIdentifier(CB->getCaller()->getName()) + ",";
     if (L)
-      Out += L->getName().str() + ",";
+      Out += encodeIdentifier(L->getName()) + ",";
 
     for (const auto &P : getIRFileNameMap()) {
-      Out += P.getValue();
+      Out += encodeIdentifier(P.getValue());
       Out += ",";
     }
 
