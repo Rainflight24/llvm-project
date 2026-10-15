@@ -47,6 +47,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/FormattedStream.h"
+#include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Process.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/IPO.h"
@@ -505,14 +506,10 @@ public:
       }
     }
     std::string Out = "";
-    if (isEmptyOutputFile()) {
-      Out += "Module|Function|Callee|Caller|Loop,";
-      for (const std::string &Feature : AllFeatures) {
-        Out += Feature + ',';
-      }
-      Out.pop_back();
-      Out += '\n';
-    }
+    OutputHeader = "Module|Function|Callee|Caller|Loop,";
+    for (const std::string &Feature : AllFeatures)
+      OutputHeader += Feature + ',';
+    OutputHeader.back() = '\n';
 
     for (auto &FeatureValues : RowsFeatureValues) {
       Out += getFileName(FeatureValues["Module"]) + '|' +
@@ -535,13 +532,35 @@ public:
     TempOutput = Out;
   }
 
-  void printOutput() { ModelDataCollector::setOutput(TempOutput); }
+  void printOutput(LLVMContext &Context, StringRef Header = "") {
+    if (Header.empty())
+      Header = OutputHeader;
+    std::string FileName = getOutputFileName();
+    if (FileName.empty() || FileName == "-" || isEmptyOutputFile()) {
+      ModelDataCollector::setOutput(Header.str() + TempOutput);
+      return;
+    }
+
+    auto Buffer = MemoryBuffer::getFile(FileName, /*IsText=*/true,
+                                        /*RequiresNullTerminator=*/false);
+    if (!Buffer) {
+      Context.emitError("cannot read Protean dump header from '" + FileName +
+                        "': " + Buffer.getError().message());
+      return;
+    }
+    if (!(*Buffer)->getBuffer().starts_with(Header)) {
+      Context.emitError("Protean dump header mismatch in '" + FileName + "'");
+      return;
+    }
+    ModelDataCollector::setOutput(TempOutput);
+  }
 
   bool getOnlyMandatory() { return OnlyMandatory; }
 
 private:
   bool OnlyMandatory = false;
   std::string TempOutput = "";
+  std::string OutputHeader;
   std::vector<std::unordered_map<std::string, std::string>> RowsFeatureValues;
 };
 
@@ -3168,7 +3187,7 @@ PreservedAnalyses CollectFeaturesPass::run(Module &M,
   MDC.formatOutput();
   MDC.addModuleFlags(&M);
   if (FeatureDump)
-    MDC.printOutput();
+    MDC.printOutput(M.getContext());
   return PreservedAnalyses::all();
 }
 
@@ -3186,11 +3205,9 @@ PreservedAnalyses LoopCollectFeaturesPass::run(Loop &L, LoopAnalysisManager &AM,
   Function *F = L.getHeader()->getParent();
   Module *M = F->getParent();
   MDC.collectLoopFeatures(&L, &AR, &AM);
-  if (MDC.isEmptyOutputFile())
-    MDC.updateOutput(/*PrintHeader*/ true, M, F, /*CB*/ nullptr, &L);
   MDC.updateOutput(/*PrintHeader*/ false, M, F, /*CB*/ nullptr, &L);
   if (FeatureDump)
-    MDC.printOutput();
+    MDC.printOutput(M->getContext(), MDC.printHeader(M, F, /*CB=*/nullptr, &L));
   return PreservedAnalyses::all();
 }
 
