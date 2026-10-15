@@ -2364,7 +2364,7 @@ void calculateLoopSetSize(ProteanCollectFeatures &ACF,
   int NumPartitions = 0;
   float AvgStoreSetSize = 0, AvgNumInsts = 0;
   size_t IndVarSetSize = 0;
-  if (!LPG.createLoopPartitions()) {
+  if (LPG.createLoopPartitions()) {
     size_t TotalStoreSetSize = 0, TotalNumInsts = 0;
     NumPartitions = LPG.getNumNodes();
     IndVarSetSize = LPG.getIndVarSet().size();
