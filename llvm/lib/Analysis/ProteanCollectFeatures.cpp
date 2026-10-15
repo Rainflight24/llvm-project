@@ -51,6 +51,7 @@
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/Scalar/LoopPassManager.h"
 #include "llvm/Transforms/Utils/LoopTools.h"
+#include <cmath>
 #include <llvm/ADT/APInt.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/LLVMContext.h>
@@ -287,6 +288,7 @@ public:
     for (const auto &P : FinalFeatures) {
       if (P.second != 0.0f)
         ++NonZero;
+      assert(!std::isnan(P.second) && "Features must not be NaN");
     }
 
     LLVM_DEBUG(llvm::errs() << "FinalFeatures.size() = " << FinalFeatures.size()
@@ -1640,13 +1642,16 @@ void calculateModuleInfoCount(ProteanCollectFeatures &ACF,
     TotalFunctionCalls += Calls;
   }
   // Average per Function Analysis
-  double AverageCallsPerFunction = 1.0 * TotalFunctionCalls / FunctionCount;
-  double AverageBBPerFunction = 1.0 * BBCount / FunctionCount;
-  double AverageInstructionCount = 1.0 * InstructionCount / FunctionCount;
+  double AverageCallsPerFunction =
+      (FunctionCount == 0) ? 0 : 1.0 * TotalFunctionCalls / FunctionCount;
+  double AverageBBPerFunction =
+      (FunctionCount == 0) ? 0 : 1.0 * BBCount / FunctionCount;
+  double AverageInstructionCount =
+      (FunctionCount == 0) ? 0 : 1.0 * InstructionCount / FunctionCount;
   double AverageLoadInstructionCount =
-      1.0 * LoadInstructionCount / FunctionCount;
+      (FunctionCount == 0) ? 0 : 1.0 * LoadInstructionCount / FunctionCount;
   double AverageStoreInstructionCount =
-      1.0 * StoreInstructionCount / FunctionCount;
+      (FunctionCount == 0) ? 0 : 1.0 * StoreInstructionCount / FunctionCount;
   int GlobalVariableCount =
       std::distance(M->globals().begin(), M->globals().end());
 
