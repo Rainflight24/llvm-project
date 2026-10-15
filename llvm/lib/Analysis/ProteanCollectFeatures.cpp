@@ -3098,6 +3098,8 @@ operator++(ProteanFIExtendedFeatures::NamedFloatFeatureIndex &n, int) {
 
 PreservedAnalyses CollectFeaturesPass::run(Module &M,
                                            ModuleAnalysisManager &AM) {
+  ProteanCollectFeatures::clearCache();
+
   LLVM_DEBUG(dbgs() << "Collecting Inlining Features\n");
   FunctionAnalysisManager &FAM =
       AM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
