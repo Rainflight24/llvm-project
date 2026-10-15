@@ -2093,8 +2093,9 @@ void calculateProteanFIExtendedFeaturesFeatures(
 
   auto F = Info.SI.F;
   auto *FAM = Info.Managers.FAM;
+  auto *IA = Info.II.IA;
 
-  assert(F && FAM && "F or FAM is nullptr");
+  assert(F && FAM && IA && "F, FAM or IA is nullptr");
 
   struct ProteanFIExtendedFeatures::FunctionFeatures FF;
   auto &DomTree = FAM->getResult<DominatorTreeAnalysis>(*F);
@@ -2105,7 +2106,7 @@ void calculateProteanFIExtendedFeaturesFeatures(
   bool ValidTree = false;
   checkValidFFCache(*F, FF, DomTree, TTI, LI, ValidSize, ValidLoop, ValidTree);
   FF = ProteanFIExtendedFeatures::getFunctionFeatures(
-      *F, DomTree, TTI, LI, *FAM, ValidSize, ValidLoop, ValidTree);
+      *F, DomTree, TTI, LI, *FAM, *IA, ValidSize, ValidLoop, ValidTree);
   getCachedFF(*F, FF, DomTree, TTI, LI);
   updateCachedFF(*F, FF, DomTree, TTI, LI);
   const auto ProteanNamedFeaturesBegin = ProteanCollectFeatures::FeatureIndex::
@@ -2993,8 +2994,8 @@ void ProteanFIExtendedFeatures::updateBBLoopCallsiteBFFeatures(
 ProteanFIExtendedFeatures::FunctionFeatures
 ProteanFIExtendedFeatures::getFunctionFeatures(
     Function &F, DominatorTree &DomTree, TargetTransformInfo &TTI, LoopInfo &LI,
-    FunctionAnalysisManager &FAM, bool ValidSize, bool ValidLoop,
-    bool ValidTree) {
+    FunctionAnalysisManager &FAM, InlineAdvisor &IA, bool ValidSize,
+    bool ValidLoop, bool ValidTree) {
   assert(llvm::is_sorted(ImportantInstructionSuccessions) &&
          "expected function features are sorted");
 
@@ -3020,6 +3021,7 @@ ProteanFIExtendedFeatures::getFunctionFeatures(
   if (!ValidTree)
     FF[NamedFeatureIndex::MaxDomTreeLevel] =
         getMaxDominatorTreeDepth(F, DomTree);
+  FF[NamedFeatureIndex::CallerHeight] = IA.getFunctionHeight(F);
   FF[NamedFeatureIndex::CallUsage] = ValidCallAndInLoopCounts.first;
   FF[NamedFeatureIndex::NumOfCallUsesInLoop] = ValidCallAndInLoopCounts.second;
   FF[NamedFeatureIndex::EntryBlockFreq] =

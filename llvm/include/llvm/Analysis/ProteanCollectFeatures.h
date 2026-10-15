@@ -107,11 +107,10 @@ public:
   ProteanFIExtendedFeatures() = default;
 
   // Collect a number of features from the function F
-  static FunctionFeatures
-  getFunctionFeatures(Function &F, DominatorTree &DomTree,
-                      TargetTransformInfo &TTI, LoopInfo &LI,
-                      FunctionAnalysisManager &FAM, bool ValidSize = false,
-                      bool ValidLoop = false, bool ValidTree = false);
+  static FunctionFeatures getFunctionFeatures(
+      Function &F, DominatorTree &DomTree, TargetTransformInfo &TTI,
+      LoopInfo &LI, FunctionAnalysisManager &FAM, InlineAdvisor &IA,
+      bool ValidSize = false, bool ValidLoop = false, bool ValidTree = false);
 
 private:
   // Loop related features, will update FF

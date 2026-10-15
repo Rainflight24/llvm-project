@@ -539,6 +539,10 @@ CallBase *InlineAdvisor::getInlinableCS(Instruction &I) {
   return nullptr;
 }
 
+unsigned InlineAdvisor::getFunctionHeight(const Function &F) const {
+  return FunctionLevels.at(&F);
+}
+
 // TODO: We can make this faster on large programs by applying
 // this patch from MLGO f46dd19b480496d2ba0a57d12935882e530f2b93.
 // This patch incrementally computes FunctionPropertiesInfo
@@ -562,9 +566,9 @@ uint64_t InlineAdvisor::getCalleeBlockFreq(CallBase &CB) const {
   return BFI.getBlockFreq(BB).getFrequency();
 }
 
-unsigned InlineAdvisor::getCallSiteHeight(CallBase *CB) {
+unsigned InlineAdvisor::getCallSiteHeight(CallBase *CB) const {
   Function *Caller = CB->getCaller();
-  return FunctionLevels[Caller];
+  return getFunctionHeight(*Caller);
 }
 
 InlineAdvisor::InlineAdvisor(Module &M, FunctionAnalysisManager &FAM,
