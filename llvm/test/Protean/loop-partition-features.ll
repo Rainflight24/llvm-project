@@ -1,11 +1,11 @@
 ; RUN: opt -passes=protean-collect-features -S %s | \
-; RUN:   %python %S/Inputs/extract-protean-features.py | FileCheck %s
+; RUN:   %python %S/Inputs/extract-protean-features.py | FileCheck %s --match-full-lines
 
 ; Successful partitioning must produce nonzero features.
-; CHECK-DAG: NumPartitions = 1.000000
-; CHECK-DAG: IndVarSetSize = 1.000000
-; CHECK-DAG: AvgStoreSetSize = 1.000000
-; CHECK-DAG: AvgNumInsts = 2.000000
+; CHECK-DAG: NumPartitions = 1
+; CHECK-DAG: IndVarSetSize = 1
+; CHECK-DAG: AvgStoreSetSize = 1
+; CHECK-DAG: AvgNumInsts = 2
 
 define void @store_loop(ptr %p) {
 entry:

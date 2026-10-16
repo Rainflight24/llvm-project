@@ -12,8 +12,8 @@ of the strings in the IR, including decimal values and hexadecimal escapes.
 
 Example lit usage:
   ; RUN: opt -passes=protean-collect-features -S %s | \\
-  ; RUN:   %python %S/Inputs/extract-protean-features.py | FileCheck %s
-  ; CHECK-DAG: block_freq = 17.000000
+  ; RUN:   %python %S/Inputs/extract-protean-features.py | FileCheck %s --match-full-lines
+  ; CHECK-DAG: block_freq = 17
 
 For bitcode input, pipe llvm-dis's output into this script first.
 """

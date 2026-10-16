@@ -1,7 +1,7 @@
 ; RUN: opt -passes=protean-collect-features -S %s | \
-; RUN:   %python %S/Inputs/extract-protean-features.py | FileCheck %s
+; RUN:   %python %S/Inputs/extract-protean-features.py | FileCheck %s --match-full-lines
 
-; CHECK-DAG: Size = 0.000000
+; CHECK-DAG: Size = 0
 
 define void @invalid_loop_size(<2 x ptr> %buckets, i1 %again) {
 entry:

@@ -1,10 +1,10 @@
 ; RUN: opt -passes=protean-collect-features -preserve-input-debuginfo-format -S %s | \
-; RUN:   %python %S/Inputs/extract-protean-features.py | FileCheck %s
+; RUN:   %python %S/Inputs/extract-protean-features.py | FileCheck %s --match-full-lines
 
 ; The debug label must not count as an instruction or make this function a node.
-; CHECK-DAG: node_count = 0.000000
-; CHECK-DAG: total_instruction_count = 1.000000
-; CHECK-DAG: average_instructions_per_function = 1.000000
+; CHECK-DAG: node_count = 0
+; CHECK-DAG: total_instruction_count = 1
+; CHECK-DAG: average_instructions_per_function = 1
 
 ; optnone preserves the debug label for the annealing instruction-cost test.
 define void @unreachable_with_debug() noinline optnone !dbg !3 {

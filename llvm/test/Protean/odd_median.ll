@@ -1,4 +1,4 @@
-; RUN: opt -passes=protean-collect-features -S %s | %python %S/Inputs/extract-protean-features.py | FileCheck %s
+; RUN: opt -passes=protean-collect-features -S %s | %python %S/Inputs/extract-protean-features.py | FileCheck %s --match-full-lines
 
 define void @random() {
   ret void
@@ -15,4 +15,4 @@ define void @main() {
   ret void
 }
 
-; CHECK-DAG: median_calls_per_function = 1.000000
+; CHECK-DAG: median_calls_per_function = 1

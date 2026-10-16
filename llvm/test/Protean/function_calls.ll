@@ -1,4 +1,4 @@
-; RUN: opt -passes=protean-collect-features -S %s | %python %S/Inputs/extract-protean-features.py | FileCheck %s
+; RUN: opt -passes=protean-collect-features -S %s | %python %S/Inputs/extract-protean-features.py | FileCheck %s --match-full-lines
 
 define void @leaf() {
   ret void
@@ -12,6 +12,6 @@ last:
   ret void
 }
 
-; CHECK-DAG: total_function_calls = 1.000000
-; CHECK-DAG: average_calls_per_function = 0.500000
-; CHECK-DAG: median_calls_per_function = 0.500000
+; CHECK-DAG: total_function_calls = 1
+; CHECK-DAG: average_calls_per_function = 0.5
+; CHECK-DAG: median_calls_per_function = 0.5

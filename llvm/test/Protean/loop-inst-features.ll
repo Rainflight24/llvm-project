@@ -1,18 +1,18 @@
 ; RUN: opt -passes=protean-collect-features -preserve-input-debuginfo-format -S %s | \
-; RUN:   %python %S/Inputs/extract-protean-features.py | FileCheck %s
+; RUN:   %python %S/Inputs/extract-protean-features.py | FileCheck %s --match-full-lines
 
 ; The debug label must not affect either loop instruction total or load fraction.
 
-; CHECK-DAG: NumLoadInstPerLoopNest = 2.000000
-; CHECK-DAG: NumStoreInstPerLoopNest = 2.000000
-; CHECK-DAG: TotLoopNestInstCount = 7.000000
-; CHECK-DAG: AvgNumLoadInstPerLoopNest = 0.285714
+; CHECK-DAG: NumLoadInstPerLoopNest = 2
+; CHECK-DAG: NumStoreInstPerLoopNest = 2
+; CHECK-DAG: TotLoopNestInstCount = 7
+; CHECK-DAG: AvgNumLoadInstPerLoopNest = 0.285714298
 
-; CHECK-DAG: NumLoadInstPerLoop = 1.000000
-; CHECK-DAG: NumStoreInstPerLoop = 1.000000
-; CHECK-DAG: TotLoopInstCount = 3.000000
-; CHECK-DAG: AvgNumLoadInstPerLoop = 0.333333
-; CHECK-DAG: TotBlocksPerLoop = 1.000000
+; CHECK-DAG: NumLoadInstPerLoop = 1
+; CHECK-DAG: NumStoreInstPerLoop = 1
+; CHECK-DAG: TotLoopInstCount = 3
+; CHECK-DAG: AvgNumLoadInstPerLoop = 0.333333343
+; CHECK-DAG: TotBlocksPerLoop = 1
 
 define void @sibling_loops(ptr %p, i1 %again) !dbg !4 {
 entry:
