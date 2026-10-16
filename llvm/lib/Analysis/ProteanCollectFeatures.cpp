@@ -2961,15 +2961,13 @@ void ProteanFIExtendedFeatures::updateBBLoopCallsiteBFFeatures(
             MaxCallsiteBlockFreq = std::max(EntryFreq, MaxCallsiteBlockFreq);
           }
 
-          if (Callee != nullptr) {
-            // Collect the number of callsites that were invoked with a pointer
-            // argument.
-            for (auto arg = Callee->arg_begin(); arg != Callee->arg_end();
-                 arg++)
-              if (isa<PointerType>(arg->getType())) {
-                FF[NamedFeatureIndex::PtrCallee]++;
-                break;
-              }
+          // Collect the number of callsites that are invoked with a pointer
+          // argument.
+          for (auto &Arg : CB->args()) {
+            if (isa<PointerType>(Arg->getType())) {
+              FF[NamedFeatureIndex::PtrCallee]++;
+              break;
+            }
           }
 
           // Collect the number of callsites that returns a pointer type.
