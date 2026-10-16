@@ -41,6 +41,6 @@ for.end:
 ; CHECK-DAG: Protean Feature node_count: 2
 ; CHECK-DAG: Protean Feature average_calls_per_function: 0.5
 ; CHECK-DAG: Protean Feature InstructionPerBlock: 1
-; CHECK-DAG: Protean Feature scc_size: 1
+; CHECK-DAG: Protean Feature scc_count: 1
 ; CHECK-DAG: Protean Feature IsInnerMostLoop: 1
 ; CHECK-DAG: Protean Feature IsOuterMostLoop: 1

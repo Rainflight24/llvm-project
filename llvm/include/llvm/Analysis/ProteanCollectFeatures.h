@@ -326,7 +326,7 @@ public:
 
     MaxLoopHeight,
 
-    SCCSize,
+    SCCCount,
     AverageComponentSize,
     NumOfFeatures
   };

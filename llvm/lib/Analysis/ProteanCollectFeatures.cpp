@@ -790,7 +790,7 @@ const llvm::EnumeratedArray<std::string, ProteanCollectFeatures::FeatureIndex,
                     "average_load_instructions_per_function");
       REGISTER_NAME(AverageStoreInstructionsPerFunction,
                     "average_store_instructions_per_function");
-      REGISTER_NAME(SCCSize, "scc_size");
+      REGISTER_NAME(SCCCount, "scc_count");
       REGISTER_NAME(AverageComponentSize, "average_component_size");
       REGISTER_NAME(NumOfFeatures, "num_features");
       REGISTER_NAME(TripCount, "TripCount");
@@ -942,7 +942,7 @@ const llvm::EnumeratedArray<ProteanCollectFeatures::Scope,
       REGISTER_SCOPE(AverageInstructionsPerFunction, Module);
       REGISTER_SCOPE(AverageLoadInstructionsPerFunction, Module);
       REGISTER_SCOPE(AverageStoreInstructionsPerFunction, Module);
-      REGISTER_SCOPE(SCCSize, Function);
+      REGISTER_SCOPE(SCCCount, Function);
       REGISTER_SCOPE(AverageComponentSize, Function);
       REGISTER_SCOPE(LoopCount, Module);
 
@@ -1081,7 +1081,7 @@ const llvm::EnumeratedArray<ProteanCollectFeatures::GroupID,
       REGISTER_GROUP(AverageInstructionsPerFunction, ModuleInfoCount);
       REGISTER_GROUP(AverageLoadInstructionsPerFunction, ModuleInfoCount);
       REGISTER_GROUP(AverageStoreInstructionsPerFunction, ModuleInfoCount);
-      REGISTER_GROUP(SCCSize, FunctionInfo);
+      REGISTER_GROUP(SCCCount, FunctionInfo);
       REGISTER_GROUP(AverageComponentSize, FunctionInfo);
       return Result;
     }();
@@ -1263,7 +1263,7 @@ const llvm::EnumeratedArray<ProteanCollectFeatures::CalculateFeatureFunction,
                         calculateModuleInfoCount);
       REGISTER_FUNCTION(AverageStoreInstructionsPerFunction,
                         calculateModuleInfoCount);
-      REGISTER_FUNCTION(SCCSize, calculateFunctionInfo);
+      REGISTER_FUNCTION(SCCCount, calculateFunctionInfo);
       REGISTER_FUNCTION(AverageComponentSize, calculateFunctionInfo);
       return Result;
     }();
@@ -1592,19 +1592,20 @@ void calculateFunctionInfo(ProteanCollectFeatures &ACF,
 
   auto *F = Info.SI.F;
 
-  int SCCSize = 0;
+  // Unreachable blocks are not counted in this traversal.
+  int SCCCount = 0;
   double AverageComponentSize = 0;
   for (scc_iterator<Function *> I = scc_begin(F); I != scc_end(F); ++I) {
-    SCCSize += 1;
-    AverageComponentSize += std::distance(I->begin(), I->end());
+    ++SCCCount;
+    AverageComponentSize += I->size();
   }
-  AverageComponentSize /= SCCSize;
+  AverageComponentSize /= SCCCount;
 
-  std::string SCCSizeStr = featureToString(SCCSize);
+  std::string SCCCountStr = featureToString(SCCCount);
   std::string AverageComponentSizeStr = featureToString(AverageComponentSize);
 
-  ACF.setFeatureValueAndInfo(ProteanCollectFeatures::FeatureIndex::SCCSize,
-                             Info, SCCSizeStr);
+  ACF.setFeatureValueAndInfo(ProteanCollectFeatures::FeatureIndex::SCCCount,
+                             Info, SCCCountStr);
   ACF.setFeatureValueAndInfo(
       ProteanCollectFeatures::FeatureIndex::AverageComponentSize, Info,
       AverageComponentSizeStr);
