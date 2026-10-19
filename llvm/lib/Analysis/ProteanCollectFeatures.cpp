@@ -15,6 +15,7 @@
 #include "llvm/Analysis/ProteanCollectFeatures.h"
 #include "llvm/ADT/EnumeratedArray.h"
 #include "llvm/ADT/SCCIterator.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/AssumptionCache.h"
@@ -246,6 +247,7 @@ public:
       TempOutput += printHeader(M, F, CB, L);
       return;
     }
+    accumulateFeatures(M, CB, L);
     std::string Out = "";
     Out += encodeIdentifier(M->getName()) + ",";
     if (F)
@@ -297,17 +299,8 @@ public:
   void addModuleFlags(Module *M) {
     std::vector<std::string> AllFeatures =
         ProteanCollectFeatures::getAllFeatures();
-    std::unordered_map<std::string, float> FinalFeatures;
     for (const std::string &Feature : AllFeatures) {
-      FinalFeatures[Feature] = 0;
-    }
-
-    for (auto &FeatureValues : RowsFeatureValues) {
-      for (const std::string &Feature : AllFeatures) {
-        if (FeatureValues.find(Feature) != FeatureValues.end()) {
-          FinalFeatures[Feature] += std::stof(FeatureValues[Feature]);
-        }
-      }
+      FinalFeatures.try_emplace(Feature, 0);
     }
 
     std::vector<Metadata *> HeaderData;
@@ -530,8 +523,6 @@ public:
     std::vector<std::string> AllFeatures =
         ProteanCollectFeatures::getAllFeatures();
     std::vector<std::string> IndexToFeature;
-    std::unordered_map<std::string, std::string> ModuleFeaturesValues;
-    bool ModuleLevel = true;
 
     for (std::string Line : Lines) {
       if (Line[0] == '-') {
@@ -548,16 +539,9 @@ public:
         for (const std::string &Value : Values) {
           const std::string &Feature = IndexToFeature[Idx];
           FeatureValues[Feature] = Value;
-          if (ModuleLevel) {
-            ModuleFeaturesValues[Feature] = Value;
-          }
           Idx++;
         }
         RowsFeatureValues.push_back(FeatureValues);
-
-        if (ModuleLevel) {
-          ModuleLevel = false;
-        }
       }
     }
     std::string Out = "";
@@ -571,9 +555,7 @@ public:
              FeatureValues["Function"] + '|' + FeatureValues["Callee"] + '|' +
              FeatureValues["Caller"] + '|' + FeatureValues["Loop"] + ',';
       for (const std::string &Feature : AllFeatures) {
-        if (ModuleFeaturesValues.count(Feature)) {
-          Out += ModuleFeaturesValues[Feature];
-        } else if (FeatureValues.count(Feature)) {
+        if (FeatureValues.count(Feature)) {
           Out += FeatureValues[Feature];
         } else {
           Out += "0";
@@ -613,6 +595,44 @@ public:
   bool getOnlyMandatory() { return OnlyMandatory; }
 
 private:
+  // Count each owner only once in the CSV and module vectors. Keep the
+  // CSV rows, but zero features already contributed by an earlier observation.
+  // Note that caller and callee columns summarize separate populations.
+  void accumulateFeatures(Module *M, CallBase *CB, Loop *L) {
+    bool NewCaller = false;
+    bool NewCallee = false;
+    bool NewOwner;
+    if (CB) {
+      NewCaller = SeenCallers.insert(CB->getCaller()).second;
+      NewCallee = SeenCallees.insert(CB->getCalledFunction()).second;
+      NewOwner = SeenCallSites.insert(CB).second;
+    } else if (L) {
+      NewOwner = SeenLoops.insert(L).second;
+    } else {
+      NewOwner = SeenModules.insert(M).second;
+    }
+
+    for (auto &[Name, Value] : Features) {
+      bool Include = NewOwner;
+      if (CB) {
+        if (StringRef(Name).starts_with("caller_"))
+          Include = NewCaller;
+        else if (StringRef(Name).starts_with("callee_"))
+          Include = NewCallee;
+      }
+      if (Include)
+        FinalFeatures[Name] += std::stof(Value);
+      else
+        Value = "0";
+    }
+  }
+
+  SmallPtrSet<const Module *, 1> SeenModules;
+  SmallPtrSet<const Function *, 16> SeenCallers;
+  SmallPtrSet<const Function *, 16> SeenCallees;
+  SmallPtrSet<const CallBase *, 16> SeenCallSites;
+  SmallPtrSet<const Loop *, 16> SeenLoops;
+  std::unordered_map<std::string, float> FinalFeatures;
   bool OnlyMandatory = false;
   std::string TempOutput = "";
   std::string OutputHeader;
