@@ -172,10 +172,12 @@ public:
         {CB->getCalledFunction(), CB, GlobalBB, GlobalM, nullptr},
         {MandatoryOnly, IA}};
 
-    registerFeature({ProteanCollectFeatures::Scope::Function}, CalleeInfo,
-                    "callee");
-    registerFeature({ProteanCollectFeatures::Scope::Function}, CallerInfo,
-                    "caller");
+    if (FeatureDump || !SeenCallees.contains(CalleeInfo.SI.F))
+      registerFeature({ProteanCollectFeatures::Scope::Function}, CalleeInfo,
+                      "callee");
+    if (FeatureDump || !SeenCallers.contains(CallerInfo.SI.F))
+      registerFeature({ProteanCollectFeatures::Scope::Function}, CallerInfo,
+                      "caller");
     registerFeature({ProteanCollectFeatures::Scope::CallSite},
                     GlobalFeatureInfo);
     ModelDataCollector::proteanCollectFeatures();
@@ -244,10 +246,13 @@ public:
   void updateOutput(bool PrintHeader, Module *M, Function *F, CallBase *CB,
                     Loop *L) {
     if (PrintHeader) {
-      TempOutput += printHeader(M, F, CB, L);
+      if (FeatureDump)
+        TempOutput += printHeader(M, F, CB, L);
       return;
     }
     accumulateFeatures(M, CB, L);
+    if (!FeatureDump)
+      return;
     std::string Out = "";
     Out += encodeIdentifier(M->getName()) + ",";
     if (F)
@@ -321,9 +326,6 @@ public:
       M->addModuleFlag(llvm::Module::Append, HEADER_FLAG, HeaderNode);
       M->addModuleFlag(llvm::Module::Append, VALUE_FLAG, ValueNode);
     }
-
-    LLVM_DEBUG(llvm::errs() << "RowsFeatureValues.size() = "
-             << RowsFeatureValues.size() << "\n");
 
     size_t NonZero = 0;
     for (const auto &P : FinalFeatures) {
@@ -544,6 +546,10 @@ public:
         RowsFeatureValues.push_back(FeatureValues);
       }
     }
+
+    LLVM_DEBUG(llvm::errs() << "RowsFeatureValues.size() = "
+             << RowsFeatureValues.size() << "\n");
+
     std::string Out = "";
     OutputHeader = "Module|Function|Callee|Caller|Loop,";
     for (const std::string &Feature : AllFeatures)
@@ -3304,10 +3310,11 @@ PreservedAnalyses CollectFeaturesPass::run(Module &M,
       MDC.updateOutput(/*PrintHeader*/ false, &M, &F, /*CB*/ nullptr, L);
     }
   }
-  MDC.formatOutput();
   MDC.addModuleFlags(&M);
-  if (FeatureDump)
+  if (FeatureDump) {
+    MDC.formatOutput();
     MDC.printOutput(M.getContext());
+  }
   return PreservedAnalyses::all();
 }
 
