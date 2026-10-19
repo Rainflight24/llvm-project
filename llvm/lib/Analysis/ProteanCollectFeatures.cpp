@@ -359,6 +359,7 @@ public:
     int shm_fd = shm_open(shm_name, O_RDWR, 0666);
     if (shm_fd == -1) {
       perror("shm_open");
+      return false;
     }
 
     SharedMemoryData *shared_data =
@@ -367,6 +368,7 @@ public:
     if (shared_data == MAP_FAILED) {
       perror("mmap (child)");
       close(shm_fd);
+      return false;
     }
 
     bool result = shared_data->ModLevelIPC;
@@ -400,7 +402,16 @@ public:
       return;
     }
 
-    shared_data->featureCount = FinalFeatures.size();
+    // Publish feature count after the payload is written to prevent the parent
+    // from using an incomplete set of features.
+    shared_data->featureCount = 0;
+    if (shared_data->dataSize >
+        std::numeric_limits<size_t>::max() - sizeof(SharedMemoryData)) {
+      llvm::errs() << "Invalid shared-memory feature buffer size\n";
+      munmap(shared_data, sizeof(SharedMemoryData));
+      close(shm_fd);
+      return;
+    }
     size_t shm_size = sizeof(SharedMemoryData) + shared_data->dataSize;
 
     munmap(shared_data, sizeof(SharedMemoryData));
@@ -412,11 +423,22 @@ public:
       return;
     }
 
-    double *ir2vec_ptr = (double*) ((char*)shared_data + shared_data->dataOffset);
+    size_t Offset = shared_data->dataOffset;
+    if (Offset < sizeof(SharedMemoryData) || Offset > shm_size ||
+        shared_data->ir2vec_dimension != IR2VEC_DIMENSION ||
+        pgmVector.size() < IR2VEC_DIMENSION ||
+        shm_size - Offset < IR2VEC_EMBEDDING_SIZE) {
+      llvm::errs()
+          << "Invalid shared-memory feature buffer offset or embedding\n";
+      munmap(shared_data, shm_size);
+      close(shm_fd);
+      return;
+    }
+    char *ir2vec_ptr = (char *)shared_data + Offset;
 
     for (int i = 0; i < shared_data->ir2vec_dimension; ++i) {
       memcpy(ir2vec_ptr, &pgmVector[i], sizeof(double));
-      ir2vec_ptr += 1;
+      ir2vec_ptr += sizeof(double);
     }
 
     char *ptr = (char *)shared_data + shared_data->dataOffset + (sizeof(double) * shared_data->ir2vec_dimension);
@@ -426,11 +448,14 @@ public:
       size_t keySize = pair.first.size() + 1;
       size_t valueSize = sizeof(pair.second);
 
-      if (ptr + keySize + valueSize > end_ptr) {
+      size_t Remaining = end_ptr - ptr;
+      if (keySize > Remaining || valueSize > Remaining - keySize) {
         LLVM_DEBUG(
             dbgs() << "Buffer overflow prevented while copying value for key: "
                    << pair.first.c_str() << "\n");
-        break;
+        munmap(shared_data, shm_size);
+        close(shm_fd);
+        return;
       }
       strcpy(ptr, pair.first.c_str());
       ptr += keySize;
@@ -438,6 +463,7 @@ public:
       memcpy(ptr, &pair.second, valueSize);
       ptr += valueSize;
     }
+    shared_data->featureCount = FinalFeatures.size();
     munmap(shared_data, shm_size);
     close(shm_fd);
   }
@@ -474,6 +500,7 @@ public:
     if (bitcode_size > MAX_BITCODE_SIZE) {
       LLVM_DEBUG(dbgs() << "Error: Bitcode size exceeds maximum.\n");
       close(shm_fd);
+      munmap(shared_data, sizeof(SharedMemoryData) + MAX_BITCODE_SIZE);
       return;
     }
 
