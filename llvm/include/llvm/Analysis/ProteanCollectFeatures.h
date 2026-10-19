@@ -287,8 +287,8 @@ public:
     IsTailCall,
 
     // Begin: TripCountFeatures
-    TripCount,
-    MaxTripCount,
+    MinKnownTripCount,
+    MaxKnownTripCount,
     IsFixedTripCount,
     // End: TripcountFeatures
 

@@ -38,4 +38,4 @@ declare i32 @printf(ptr noundef, ...) #1
 !1 = !{!"llvm.loop.mustprogress"}
 
 ; CHECK: MaxLoopHeight
-; CHECK: TripCount
+; CHECK: MinKnownTripCount

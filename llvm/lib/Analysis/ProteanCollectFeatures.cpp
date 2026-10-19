@@ -793,8 +793,8 @@ const llvm::EnumeratedArray<std::string, ProteanCollectFeatures::FeatureIndex,
       REGISTER_NAME(SCCCount, "scc_count");
       REGISTER_NAME(AverageComponentSize, "average_component_size");
       REGISTER_NAME(NumOfFeatures, "num_features");
-      REGISTER_NAME(TripCount, "TripCount");
-      REGISTER_NAME(MaxTripCount, "MaxTripCount");
+      REGISTER_NAME(MinKnownTripCount, "MinKnownTripCount");
+      REGISTER_NAME(MaxKnownTripCount, "MaxKnownTripCount");
       REGISTER_NAME(LoopSize, "Size");
       REGISTER_NAME(InitialIVValueInt, "InitialIVValueInt");
       REGISTER_NAME(FinalIVValueInt, "FinalIVValueInt");
@@ -906,8 +906,8 @@ const llvm::EnumeratedArray<ProteanCollectFeatures::Scope,
       REGISTER_SCOPE(IsInInnerLoop, CallSite);
       REGISTER_SCOPE(IsMustTailCall, CallSite);
       REGISTER_SCOPE(IsTailCall, CallSite);
-      REGISTER_SCOPE(TripCount, Loop);
-      REGISTER_SCOPE(MaxTripCount, Loop);
+      REGISTER_SCOPE(MinKnownTripCount, Loop);
+      REGISTER_SCOPE(MaxKnownTripCount, Loop);
       REGISTER_SCOPE(IsFixedTripCount, Loop);
       REGISTER_SCOPE(LoopSize, Loop);
       REGISTER_SCOPE(InitialIVValueInt, Loop);
@@ -1046,8 +1046,8 @@ const llvm::EnumeratedArray<ProteanCollectFeatures::GroupID,
       REGISTER_GROUP(
           ProteanFIExtendedFeaturesBlockWithMultipleSuccessorsPerLoop,
           ProteanFIExtendedFeatures);
-      REGISTER_GROUP(TripCount, TripCountFeatures);
-      REGISTER_GROUP(MaxTripCount, TripCountFeatures);
+      REGISTER_GROUP(MinKnownTripCount, TripCountFeatures);
+      REGISTER_GROUP(MaxKnownTripCount, TripCountFeatures);
       REGISTER_GROUP(IsFixedTripCount, TripCountFeatures);
       REGISTER_GROUP(InitialIVValueInt, IVRelatedFeatures);
       REGISTER_GROUP(FinalIVValueInt, IVRelatedFeatures);
@@ -1223,8 +1223,8 @@ const llvm::EnumeratedArray<ProteanCollectFeatures::CalculateFeatureFunction,
       REGISTER_FUNCTION(IsInInnerLoop, calculateIsInInnerLoop);
       REGISTER_FUNCTION(IsMustTailCall, calculateIsMustTailCall);
       REGISTER_FUNCTION(IsTailCall, calculateIsTailCall);
-      REGISTER_FUNCTION(TripCount, calculateTripCount);
-      REGISTER_FUNCTION(MaxTripCount, calculateTripCount);
+      REGISTER_FUNCTION(MinKnownTripCount, calculateTripCount);
+      REGISTER_FUNCTION(MaxKnownTripCount, calculateTripCount);
       REGISTER_FUNCTION(LoopSize, calculateLoopSize);
       REGISTER_FUNCTION(InitialIVValueInt, calculateIVValueFeatures);
       REGISTER_FUNCTION(FinalIVValueInt, calculateIVValueFeatures);
@@ -2467,27 +2467,31 @@ void calculateTripCount(ProteanCollectFeatures &ACF,
   assert(AR && L && "AR or L is nullptr");
 
   auto &SE = AR->SE;
-  unsigned TripCount = 0;
   SmallVector<BasicBlock *, 8> ExitingBlocks;
   L->getExitingBlocks(ExitingBlocks);
-  for (BasicBlock *ExitingBlock : ExitingBlocks)
-    if (unsigned TC = SE.getSmallConstantTripCount(L, ExitingBlock))
-      if (!TripCount || TC < TripCount)
-        TripCount = TC;
+  unsigned MinKnownTripCount = 0, MaxKnownTripCount = 0;
 
-  unsigned MaxTripCount = 0;
-  if (!TripCount) {
-    MaxTripCount = SE.getSmallConstantMaxTripCount(L);
-  }
-  bool IsFixedTripCount = (TripCount != 0) ? true : false;
+  // Loops without exits do not have a fixed trip count.
+  bool IsFixedTripCount = !ExitingBlocks.empty();
+  for (BasicBlock *ExitingBlock : ExitingBlocks)
+    if (unsigned TC = SE.getSmallConstantTripCount(L, ExitingBlock)) {
+      if (!MinKnownTripCount || TC < MinKnownTripCount)
+        MinKnownTripCount = TC;
+      if (!MaxKnownTripCount || TC > MaxKnownTripCount)
+        MaxKnownTripCount = TC;
+    } else {
+      IsFixedTripCount = false;
+    }
 
   ACF.setFeatureValueAndInfo(
       ProteanCollectFeatures::FeatureIndex::IsFixedTripCount, Info,
       featureToString(IsFixedTripCount));
-  ACF.setFeatureValueAndInfo(ProteanCollectFeatures::FeatureIndex::TripCount,
-                             Info, featureToString(TripCount));
-  ACF.setFeatureValueAndInfo(ProteanCollectFeatures::FeatureIndex::MaxTripCount,
-                             Info, featureToString(MaxTripCount));
+  ACF.setFeatureValueAndInfo(
+      ProteanCollectFeatures::FeatureIndex::MinKnownTripCount, Info,
+      featureToString(MinKnownTripCount));
+  ACF.setFeatureValueAndInfo(
+      ProteanCollectFeatures::FeatureIndex::MaxKnownTripCount, Info,
+      featureToString(MaxKnownTripCount));
 }
 
 void calculateLoopSize(ProteanCollectFeatures &ACF,

@@ -48,4 +48,4 @@ declare i32 @printf(ptr noundef, ...) #1
 ; CHECK: callsite_cost
 ; CHECK: callee_Blocks
 ; CHECK: caller_Blocks
-; CHECK: TripCount
+; CHECK: MinKnownTripCount
