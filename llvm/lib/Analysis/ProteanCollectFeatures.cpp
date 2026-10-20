@@ -99,6 +99,15 @@ static cl::opt<bool> FeatureDump("enable-protean-feature-dump", cl::init(false))
 static cl::opt<bool> EnableLoopCollectFeature("enable-loop-collect-feature",
                                               cl::init(false));
 
+// Ordinary calls are direct, indirect, and declaration calls, but not
+// intrinsics and inline assembly.
+static bool isOrdinaryCall(const CallBase &CB) {
+  if (CB.isInlineAsm())
+    return false;
+  const Function *Callee = CB.getCalledFunction();
+  return !Callee || !Callee->isIntrinsic();
+}
+
 // Preserve enough significant digits to round-trip floating-point features.
 template <typename T> static std::string featureToString(T Value) {
   static_assert(std::is_arithmetic_v<T>);
@@ -241,9 +250,11 @@ public:
     Out += encodeIdentifier(M->getName()) + ",";
     if (F)
       Out += encodeIdentifier(F->getName()) + ",";
-    if (CB)
-      Out += encodeIdentifier(CB->getCalledFunction()->getName()) + "," +
-             encodeIdentifier(CB->getCaller()->getName()) + ",";
+    if (CB) {
+      if (Function *Callee = CB->getCalledFunction())
+        Out += encodeIdentifier(Callee->getName());
+      Out += "," + encodeIdentifier(CB->getCaller()->getName()) + ",";
+    }
     if (L)
       Out += encodeIdentifier(L->getName()) + ",";
 
@@ -1433,6 +1444,14 @@ std::vector<std::string> ProteanCollectFeatures::getAllFeatures() {
   return Res;
 }
 
+// Explicitly set a group of features as unavailable.
+static void setZeroFeatures(ProteanCollectFeatures &ACF,
+                            const ProteanCollectFeatures::FeatureInfo &Info,
+                            ProteanCollectFeatures::GroupID Group) {
+  for (auto Idx : ProteanCollectFeatures::getGroupFeatures(Group))
+    ACF.setFeatureValueAndInfo(Idx, Info, "0");
+}
+
 void calculateFPIRelated(ProteanCollectFeatures &ACF,
                          const ProteanCollectFeatures::FeatureInfo &Info) {
   assert(Info.Idx == ProteanCollectFeatures::FeatureIndex::NumOfFeatures ||
@@ -1440,6 +1459,11 @@ void calculateFPIRelated(ProteanCollectFeatures &ACF,
 
   auto *FAM = Info.Managers.FAM;
   auto *F = Info.SI.F;
+
+  if (!F || F->isDeclaration()) {
+    setZeroFeatures(ACF, Info, ProteanCollectFeatures::GroupID::FPIRelated);
+    return;
+  }
 
   assert(F && FAM && "Function or FAM is nullptr");
 
@@ -1550,8 +1574,13 @@ void calculateCostEstimate(ProteanCollectFeatures &ACF,
 
   assert(CB && FAM && "CallBase or FAM is nullptr");
 
-  auto &Callee = *CB->getCalledFunction();
-  auto &TIR = FAM->getResult<TargetIRAnalysis>(Callee);
+  Function *Callee = CB->getCalledFunction();
+  if (!Callee || Callee->isDeclaration()) {
+    ACF.setFeatureValueAndInfo(
+        ProteanCollectFeatures::FeatureIndex::CostEstimate, Info, "0");
+    return;
+  }
+  auto &TIR = FAM->getResult<TargetIRAnalysis>(*Callee);
 
   auto GetAssumptionCache = [&](Function &F) -> AssumptionCache & {
     return FAM->getResult<AssumptionAnalysis>(F);
@@ -1619,6 +1648,11 @@ void calculateFunctionInfo(ProteanCollectFeatures &ACF,
 
   auto *F = Info.SI.F;
 
+  if (!F || F->isDeclaration()) {
+    setZeroFeatures(ACF, Info, ProteanCollectFeatures::GroupID::FunctionInfo);
+    return;
+  }
+
   // Unreachable blocks are not counted in this traversal.
   int SCCCount = 0;
   double AverageComponentSize = 0;
@@ -1684,13 +1718,9 @@ void calculateModuleInfoCount(ProteanCollectFeatures &ACF,
             StoreInstructionCount += 1;
           }
           // Function Calls Count
-          if (auto *CB = dyn_cast<CallBase>(&I)) {
-            if (Function *Callee = CB->getCalledFunction()) {
-              if (!Callee->isDeclaration()) {
-                FunctionCalls += 1;
-              }
-            }
-          }
+          if (auto *CB = dyn_cast<CallBase>(&I))
+            if (isOrdinaryCall(*CB))
+              ++FunctionCalls;
         }
 
         int PredCount = std::distance(pred_begin(&BB), pred_end(&BB));
@@ -1880,6 +1910,13 @@ void calculateMandatoryKind(ProteanCollectFeatures &ACF,
 
   assert(CB && FAM && "CallBase or FAM is nullptr");
 
+  Function *Callee = CB->getCalledFunction();
+  if (!Callee || Callee->isDeclaration()) {
+    ACF.setFeatureValueAndInfo(
+        ProteanCollectFeatures::FeatureIndex::MandatoryKind, Info, "0");
+    return;
+  }
+
   auto &Caller = *CB->getCaller();
   auto &ORE = FAM->getResult<OptimizationRemarkEmitterAnalysis>(Caller);
   auto MandatoryKind = ProteanCollectFeatures::getMandatoryKind(*CB, *FAM, ORE);
@@ -1938,8 +1975,13 @@ void calculateInlineCostFeatures(
 
   assert(CB && FAM && "CallBase or FAM is nullptr");
 
-  auto &Callee = *CB->getCalledFunction();
-  auto &TIR = FAM->getResult<TargetIRAnalysis>(Callee);
+  Function *Callee = CB->getCalledFunction();
+  if (!Callee || Callee->isDeclaration()) {
+    setZeroFeatures(ACF, Info,
+                    ProteanCollectFeatures::GroupID::InlineCostFeatureGroup);
+    return;
+  }
+  auto &TIR = FAM->getResult<TargetIRAnalysis>(*Callee);
 
   auto GetAssumptionCache = [&](Function &F) -> AssumptionCache & {
     return FAM->getResult<AssumptionAnalysis>(F);
@@ -2029,8 +2071,13 @@ void calculateThreshold(ProteanCollectFeatures &ACF,
 
   assert(CB && FAM && "CallBase or FAM is nullptr");
 
-  auto &Callee = *CB->getCalledFunction();
-  auto &TIR = FAM->getResult<TargetIRAnalysis>(Callee);
+  Function *Callee = CB->getCalledFunction();
+  if (!Callee || Callee->isDeclaration()) {
+    setZeroFeatures(ACF, Info,
+                    ProteanCollectFeatures::GroupID::ThresholdFeatureGroup);
+    return;
+  }
+  auto &TIR = FAM->getResult<TargetIRAnalysis>(*Callee);
 
   auto GetAssumptionCache = [&](Function &F) -> AssumptionCache & {
     return FAM->getResult<AssumptionAnalysis>(F);
@@ -2177,6 +2224,12 @@ void calculateProteanFIExtendedFeaturesFeatures(
   auto F = Info.SI.F;
   auto *FAM = Info.Managers.FAM;
   auto *IA = Info.II.IA;
+
+  if (!F || F->isDeclaration()) {
+    setZeroFeatures(ACF, Info,
+                    ProteanCollectFeatures::GroupID::ProteanFIExtendedFeatures);
+    return;
+  }
 
   assert(F && FAM && IA && "F, FAM or IA is nullptr");
 
@@ -2981,9 +3034,9 @@ void ProteanFIExtendedFeatures::updateBBLoopCallsiteBFFeatures(
     for (auto &I : BB.instructionsWithoutDebug()) {
       if (CallBase *CB = dyn_cast<CallBase>(&I)) {
         Function *Callee = CB->getCalledFunction();
-        if (Callee && !Callee->isIntrinsic()) {
+        if (isOrdinaryCall(*CB)) {
           ++NumCallsite;
-          if (!Callee->isDeclaration()) {
+          if (Callee && !Callee->isDeclaration()) {
             // Check all the functions that was called and get the max block
             // frequency.
             uint64_t EntryFreq = FAM.getResult<BlockFrequencyAnalysis>(*Callee)
@@ -3181,18 +3234,16 @@ PreservedAnalyses CollectFeaturesPass::run(Module &M,
     for (BasicBlock &BB : F) {
       for (Instruction &I : BB) {
         if (auto *CB = dyn_cast<CallBase>(&I)) {
-          if (Function *Callee = CB->getCalledFunction()) {
-            if (!Callee->isDeclaration()) {
-              MDC.collectFeatures(CB, IA, &FAM, &AM);
-              if (!CallBaseIsCollected) {
-                CallBaseIsCollected = true;
-                MDC.updateOutput(/*PrintHeader*/ true, &M, &F, CB,
-                                 /*L*/ nullptr);
-              }
-              MDC.updateOutput(/*PrintHeader*/ false, &M, &F, CB,
-                               /*L*/ nullptr);
-            }
+          if (!isOrdinaryCall(*CB))
+            continue;
+          MDC.collectFeatures(CB, IA, &FAM, &AM);
+          if (!CallBaseIsCollected) {
+            CallBaseIsCollected = true;
+            MDC.updateOutput(/*PrintHeader*/ true, &M, &F, CB,
+                             /*L*/ nullptr);
           }
+          MDC.updateOutput(/*PrintHeader*/ false, &M, &F, CB,
+                           /*L*/ nullptr);
         }
       }
     }
