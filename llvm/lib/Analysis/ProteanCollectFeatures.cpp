@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Analysis/ProteanCollectFeatures.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/EnumeratedArray.h"
 #include "llvm/ADT/SCCIterator.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -548,7 +549,7 @@ public:
     }
 
     LLVM_DEBUG(llvm::errs() << "RowsFeatureValues.size() = "
-             << RowsFeatureValues.size() << "\n");
+                            << RowsFeatureValues.size() << "\n");
 
     std::string Out = "";
     OutputHeader = "Module|Function|Callee|Caller|Loop,";
@@ -601,6 +602,28 @@ public:
   bool getOnlyMandatory() { return OnlyMandatory; }
 
 private:
+  ProteanCollectFeatures::FeatureValueMap
+  collectRegisteredFeatures(const ProteanFeatureCollectInfo &Info) override {
+    if (!Info.RegisteredScopes || Info.RegisteredScopes->size() != 1 ||
+        Info.RegisteredScopes->front() !=
+            ProteanCollectFeatures::Scope::Function)
+      return ModelDataCollector::collectRegisteredFeatures(Info);
+
+    const Function *F = Info.GlobalInfo->SI.F;
+    auto [It, Inserted] = FunctionFeatureCache.try_emplace(F);
+    if (Inserted) {
+      LLVM_DEBUG(dbgs() << "Collecting Protean function features: "
+                        << (F ? F->getName() : "<indirect>") << '\n');
+      It->second = ModelDataCollector::collectRegisteredFeatures(Info);
+    }
+    return It->second;
+  }
+
+  // Function features are independent of their callsite and caller/callee role.
+  // Lifespan: one pass invocation, since IR is unchanged during collection.
+  DenseMap<const Function *, ProteanCollectFeatures::FeatureValueMap>
+      FunctionFeatureCache;
+
   // Count each owner only once in the CSV and module vectors. Keep the
   // CSV rows, but zero features already contributed by an earlier observation.
   // Note that caller and callee columns summarize separate populations.
