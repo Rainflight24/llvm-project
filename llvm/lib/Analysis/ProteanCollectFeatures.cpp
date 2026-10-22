@@ -1422,25 +1422,16 @@ ProteanCollectFeatures::Scope ProteanCollectFeatures::getFeatureScope(
   return FeatureIndexToScope[Idx];
 }
 
-std::set<ProteanCollectFeatures::FeatureIndex>
-ProteanCollectFeatures::getGroupFeatures(
+auto ProteanCollectFeatures::getGroupFeatures(
     ProteanCollectFeatures::GroupID Group) {
-  std::set<ProteanCollectFeatures::FeatureIndex> FeatureIndices;
   auto Range = GroupToFeatureIndices.equal_range(Group);
-  for (auto It = Range.first; It != Range.second; ++It) {
-    FeatureIndices.insert(It->second);
-  }
-  return FeatureIndices;
+  return llvm::make_second_range(llvm::make_range(Range));
 }
 
-std::set<ProteanCollectFeatures::FeatureIndex>
-ProteanCollectFeatures::getScopeFeatures(ProteanCollectFeatures::Scope S) {
-  std::set<ProteanCollectFeatures::FeatureIndex> FeatureIndices;
+auto ProteanCollectFeatures::getScopeFeatures(ProteanCollectFeatures::Scope S) {
+  std::vector<ProteanCollectFeatures::FeatureIndex> FeatureIndices;
   auto Range = ScopeToFeatureIndices.equal_range(S);
-  for (auto It = Range.first; It != Range.second; ++It) {
-    FeatureIndices.insert(It->second);
-  }
-  return FeatureIndices;
+  return llvm::make_second_range(llvm::make_range(Range));
 }
 
 bool ProteanCollectFeatures::containsFeature(
