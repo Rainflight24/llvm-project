@@ -17,6 +17,7 @@
 #include "llvm/ADT/EnumeratedArray.h"
 #include "llvm/ADT/SCCIterator.h"
 #include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/AssumptionCache.h"
@@ -40,6 +41,7 @@
 #include "llvm/Analysis/ReplayInlineAdvisor.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
+#include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/IRPrintingPasses.h"
 #include "llvm/IR/Instructions.h"
@@ -50,13 +52,18 @@
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/FormattedStream.h"
+#include "llvm/Support/MD5.h"
 #include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/Process.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/Scalar/LoopPassManager.h"
 #include "llvm/Transforms/Utils/LoopTools.h"
 #include <cmath>
+#include <cstring>
+#include <fcntl.h>
+#include <iostream>
 #include <limits>
 #include <llvm/ADT/APInt.h>
 #include <llvm/IR/Constants.h>
@@ -66,15 +73,12 @@
 #include <optional>
 #include <sstream>
 #include <string>
-#include <type_traits>
-#include <unordered_map>
-#define DEBUG_TYPE "proteanFC"
-#include "llvm/Bitcode/BitcodeWriter.h"
-#include <cstring>
-#include <fcntl.h>
-#include <iostream>
 #include <sys/mman.h>
+#include <type_traits>
 #include <unistd.h>
+#include <unordered_map>
+
+#define DEBUG_TYPE "proteanFC"
 
 #define HEADER_FLAG "proteanFeatureHeaders"
 #define VALUE_FLAG "proteanFeatureValues"
@@ -89,16 +93,32 @@ struct SharedMemoryData {
   size_t dataOffset;
 };
 
-// In "llvm/lib/Analysis/ModelDataCollector.cpp"
-extern llvm::cl::opt<std::string> ProteanModelFile;
-extern llvm::cl::opt<std::string> IR2VecModelFile;
-extern llvm::cl::opt<std::string> ProteanLoopModelFile;
+static cl::opt<std::string>
+    ProteanDumpFile("protean-dump-file", cl::init("-"), cl::Hidden,
+                    cl::desc("Name of the file to store feature data in. "
+                             "If any of the following substitutions are used, "
+                             "data will be likely be stored in multiple files. "
+                             "%f: file name of the module's source file. "
+                             "%h: hash of the module's full source path. "
+                             "%%: a single %."));
+static cl::opt<std::string>
+    IR2VecDumpFile("ir2vec-dump-file", cl::Hidden,
+                   cl::desc("Name of a file to store embeddings in."));
+static cl::list<std::string>
+    DumpOnly("protean-dump-only", cl::Hidden,
+             cl::desc("Whitelist of files to dump, based on a module's "
+                      "getSourceFileName()."));
+static cl::opt<std::string> ProteanLoopModelFile(
+    "protean-loop-dump-file", cl::init("-"), cl::Hidden,
+    cl::desc("Name of a file to store loop feature data in."));
 
 // In "llvm/lib/Passes/PassBuilderPipelines.cpp"
 extern llvm::cl::opt<bool> UseProteanInitialPasses;
 using namespace LoopTools;
 namespace llvm {
-static cl::opt<bool> FeatureDump("enable-protean-feature-dump", cl::init(false));
+// Also read by llvm/tools/protean/protean.cpp.
+cl::opt<bool> ProteanFeatureDump("enable-protean-feature-dump",
+                                 cl::init(false));
 static cl::opt<bool> EnableLoopCollectFeature("enable-loop-collect-feature",
                                               cl::init(false));
 
@@ -148,7 +168,7 @@ class ModelDataProteanCollector : public ModelDataCollector {
   formatted_raw_ostream *IR2VecOS;
 
 public:
-  ModelDataProteanCollector(formatted_raw_ostream &OS,
+  ModelDataProteanCollector(formatted_raw_ostream *OS,
                             formatted_raw_ostream *IR2VecOS, bool OnlyMandatory,
                             std::string OutputFileName, std::string TempOutput)
       : ModelDataCollector(OS, OutputFileName), IR2VecOS(IR2VecOS),
@@ -178,10 +198,10 @@ public:
         {CB->getCalledFunction(), CB, GlobalBB, GlobalM, nullptr},
         {MandatoryOnly, IA}};
 
-    if (FeatureDump || !SeenCallees.contains(CalleeInfo.SI.F))
+    if (ProteanFeatureDump || !SeenCallees.contains(CalleeInfo.SI.F))
       registerFeature({ProteanCollectFeatures::Scope::Function}, CalleeInfo,
                       "callee");
-    if (FeatureDump || !SeenCallers.contains(CallerInfo.SI.F))
+    if (ProteanFeatureDump || !SeenCallers.contains(CallerInfo.SI.F))
       registerFeature({ProteanCollectFeatures::Scope::Function}, CallerInfo,
                       "caller");
     registerFeature({ProteanCollectFeatures::Scope::CallSite},
@@ -252,12 +272,12 @@ public:
   void updateOutput(bool PrintHeader, Module *M, Function *F, CallBase *CB,
                     Loop *L) {
     if (PrintHeader) {
-      if (FeatureDump)
+      if (ProteanFeatureDump)
         TempOutput += printHeader(M, F, CB, L);
       return;
     }
     accumulateFeatures(M, CB, L);
-    if (!FeatureDump)
+    if (!ProteanFeatureDump)
       return;
     std::string Out = "";
     Out += encodeIdentifier(M->getName()) + ",";
@@ -3255,6 +3275,61 @@ operator++(ProteanFIExtendedFeatures::NamedFloatFeatureIndex &n, int) {
   return res;
 }
 
+static SmallString<128> substituteDumpFile(const std::string Original,
+                                           const Module &M) {
+  SmallString<128> Result;
+  bool PrevWasEscape = false;
+
+  for (char Ch : Original) {
+    if (PrevWasEscape) {
+      PrevWasEscape = false;
+      switch (Ch) {
+      case 'f':
+        Result += sys::path::filename(M.getSourceFileName());
+        break;
+      case 'h':
+        Result += std::to_string(llvm::MD5Hash(M.getSourceFileName()));
+        break;
+      case '%':
+        Result += '%';
+        break;
+      default:
+        Result += "%";
+        Result += Ch;
+      }
+    } else if (Ch == '%') {
+      PrevWasEscape = true;
+    } else {
+      Result += Ch;
+      PrevWasEscape = false;
+    }
+  }
+  if (PrevWasEscape)
+    Result += '%';
+
+  LLVM_DEBUG(dbgs() << "substituted dump name: " << Original << " -> " << Result
+                    << '\n';);
+
+  return Result;
+}
+
+// Set up the ostreams to output to DumpFile.
+static void setupOS(std::optional<raw_fd_ostream> &RawOS,
+                    std::optional<formatted_raw_ostream> &OS,
+                    const llvm::Module &M, const llvm::StringRef DumpFile) {
+  std::error_code EC;
+
+  RawOS.emplace(DumpFile, EC, sys::fs::CD_OpenAlways, sys::fs::FA_Write,
+                sys::fs::OF_Append);
+  if (EC) {
+    M.getContext().emitError("Cannot open dump file '" + DumpFile +
+                             "':" + EC.message());
+    RawOS.reset();
+  } else {
+    OS.emplace(RawOS.value());
+  }
+}
+
 PreservedAnalyses CollectFeaturesPass::run(Module &M,
                                            ModuleAnalysisManager &AM) {
   ProteanCollectFeatures::clearCache();
@@ -3271,31 +3346,34 @@ PreservedAnalyses CollectFeaturesPass::run(Module &M,
   InlineAdvisor *IA = IAA.getAdvisor();
   assert(IA && "IA is null!");
 
-  std::error_code EC;
-  raw_fd_ostream RawOS(ProteanModelFile.getValue(), EC, sys::fs::CD_OpenAlways,
-                       sys::fs::FA_Write, sys::fs::OF_Append);
-  formatted_raw_ostream OS(RawOS);
-  if (EC) {
-    M.getContext().emitError("Cannot open Protean dump file '" +
-                             ProteanModelFile.getValue() + "':" + EC.message());
+  bool ShouldDump = false;
+  if (ProteanFeatureDump) {
+    ShouldDump = DumpOnly.empty();
+    for (const std::string &File : DumpOnly)
+      if (File == M.getSourceFileName())
+        ShouldDump = true;
   }
 
-  std::optional<raw_fd_ostream> IR2VecRawOS;
-  std::optional<formatted_raw_ostream> IR2VecOS;
-  if (!IR2VecModelFile.empty()) {
-    IR2VecRawOS.emplace(IR2VecModelFile.getValue(), EC, sys::fs::CD_OpenAlways,
-                        sys::fs::FA_Write, sys::fs::OF_Append);
-    if (EC) {
-      M.getContext().emitError("Cannot open IR2Vec dump file '" +
-                               IR2VecModelFile.getValue() +
-                               "':" + EC.message());
-      IR2VecRawOS.reset();
-    } else {
-      IR2VecOS.emplace(IR2VecRawOS.value());
+  std::optional<raw_fd_ostream> ProteanRawOS, IR2VecRawOS;
+  std::optional<formatted_raw_ostream> ProteanOS, IR2VecOS;
+  llvm::SmallString<128> SubstitutedProteanDump, SubstitutedIR2VecDump;
+
+  if (ShouldDump) {
+    if (!ProteanDumpFile.empty()) {
+      SubstitutedProteanDump =
+          substituteDumpFile(ProteanDumpFile.getValue(), M);
+      setupOS(ProteanRawOS, ProteanOS, M, SubstitutedProteanDump);
+    }
+    if (!IR2VecDumpFile.empty()) {
+      SubstitutedIR2VecDump = substituteDumpFile(IR2VecDumpFile.getValue(), M);
+      setupOS(IR2VecRawOS, IR2VecOS, M, SubstitutedIR2VecDump);
     }
   }
-  ModelDataProteanCollector MDC(OS, IR2VecOS ? &IR2VecOS.value() : nullptr,
-                                /*OnlyMandatory*/ false, ProteanModelFile,
+
+  ModelDataProteanCollector MDC(ProteanOS ? &ProteanOS.value() : nullptr,
+                                IR2VecOS ? &IR2VecOS.value() : nullptr,
+                                /*OnlyMandatory*/ false,
+                                std::string(SubstitutedProteanDump.str()),
                                 /*TempOutput*/ "");
 
   // Module level collection
@@ -3365,11 +3443,11 @@ PreservedAnalyses CollectFeaturesPass::run(Module &M,
     }
   }
 
-  if (UseProteanInitialPasses || (FeatureDump && IR2VecOS))
+  if (UseProteanInitialPasses || (ShouldDump && IR2VecOS))
     MDC.collectIR2VecEmbeddings(M);
   MDC.addModuleFlags(&M);
 
-  if (FeatureDump) {
+  if (ShouldDump) {
     MDC.formatOutput();
     MDC.printOutput(M.getContext());
   }
@@ -3385,13 +3463,13 @@ PreservedAnalyses LoopCollectFeaturesPass::run(Loop &L, LoopAnalysisManager &AM,
                        sys::fs::CD_OpenAlways, sys::fs::FA_Write,
                        sys::fs::OF_Append);
   formatted_raw_ostream OS(RawOS);
-  ModelDataProteanCollector MDC(OS, nullptr, /*OnlyMandatory*/ false,
+  ModelDataProteanCollector MDC(&OS, nullptr, /*OnlyMandatory*/ false,
                                 ProteanLoopModelFile, /*TempOutput*/ "");
   Function *F = L.getHeader()->getParent();
   Module *M = F->getParent();
   MDC.collectLoopFeatures(&L, &AR, &AM);
   MDC.updateOutput(/*PrintHeader*/ false, M, F, /*CB*/ nullptr, &L);
-  if (FeatureDump)
+  if (ProteanFeatureDump)
     MDC.printOutput(M->getContext(), MDC.printHeader(M, F, /*CB=*/nullptr, &L));
   return PreservedAnalyses::all();
 }

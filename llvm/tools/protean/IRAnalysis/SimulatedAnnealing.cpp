@@ -99,7 +99,7 @@ void SimulatedAnnealingProtean::generatePermutationsWithRepetitions(
 namespace llvm {
 class ModelDataScoreCollector : public ModelDataCollector {
 public:
-  ModelDataScoreCollector(formatted_raw_ostream &OS, std::string OutputFileName)
+  ModelDataScoreCollector(formatted_raw_ostream *OS, std::string OutputFileName)
       : ModelDataCollector(OS, OutputFileName) {}
 
   void collectFeatures(std::unique_ptr<Module> &M) {
@@ -664,7 +664,7 @@ double SimulatedAnnealingProtean::irAnalysisCost(
                                 llvm::sys::fs::FA_Write,
                                 llvm::sys::fs::OF_Append);
     llvm::formatted_raw_ostream OS(RawOS);
-    llvm::ModelDataScoreCollector MDC(OS, SAModelFile);
+    llvm::ModelDataScoreCollector MDC(&OS, SAModelFile);
 
     LLVM_DEBUG(llvm::dbgs() << "Parsing module\n");
     llvm::Expected<std::unique_ptr<llvm::Module>> moduleOrErr =

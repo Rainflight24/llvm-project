@@ -24,7 +24,7 @@ class ModelDataCollector {
 public:
   enum DumpOption { function, loop, before, after };
 
-  ModelDataCollector(formatted_raw_ostream &OS, std::string OutputFileName = "")
+  ModelDataCollector(formatted_raw_ostream *OS, std::string OutputFileName = "")
       : OutputFileName(OutputFileName), Out(OS) {}
 
   ~ModelDataCollector() {}
@@ -44,7 +44,7 @@ public:
   void
   addFeatures(std::vector<std::pair<std::string, std::string>> NewFeatures);
 
-  // Print out the features
+  // Print out the features. Requires Out to be non-nullptr.
   void printRow(bool printHeader = false);
   void setOutput(std::string Output);
 
@@ -106,7 +106,7 @@ protected:
 
 private:
   // Stream for dumping training data
-  formatted_raw_ostream &Out;
+  formatted_raw_ostream *Out;
   StringMap<std::string> IRFileNames;
 };
 } // namespace llvm

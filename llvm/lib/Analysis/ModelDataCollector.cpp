@@ -40,16 +40,6 @@ static cl::opt<std::string>
     IRFileDirectory("IR-file-directory", cl::Hidden,
                     cl::desc("Name of a directory to store IR files."));
 
-cl::opt<std::string>
-    ProteanModelFile("protean-dump-file", cl::init("-"), cl::Hidden,
-                     cl::desc("Name of a file to store feature data in."));
-cl::opt<std::string>
-    IR2VecModelFile("ir2vec-dump-file", cl::Hidden,
-                    cl::desc("Name of a file to store embeddings in."));
-cl::opt<std::string> ProteanLoopModelFile(
-    "protean-loop-dump-file", cl::init("-"), cl::Hidden,
-    cl::desc("Name of a file to store loop feature data in."));
-
 std::string ModelDataCollector::getDumpOptionAsString(DumpOption DO) {
   switch (DO) {
   case DumpOption::loop:
@@ -208,31 +198,37 @@ void ModelDataCollector::setIRFileNameMap(
 }
 
 void ModelDataCollector::printRow(bool printHeader) {
+  if (!Out)
+    return;
+
   // Print the IR file names first
   for (const auto &P : IRFileNames) {
     if (printHeader)
-      Out << P.getKey();
+      *Out << P.getKey();
     else
-      Out << P.getValue();
+      *Out << P.getValue();
 
-    Out << ",";
+    *Out << ",";
   }
 
   for (unsigned I = 0, E = Features.size(); I != E; ++I) {
     // First value does not get a comma
     if (I)
-      Out << ",";
+      *Out << ",";
 
     if (printHeader)
-      Out << Features.at(I).first;
+      *Out << Features.at(I).first;
     else
-      Out << Features.at(I).second;
+      *Out << Features.at(I).second;
   }
 
-  Out << "\n";
+  *Out << "\n";
 }
 
-void ModelDataCollector::setOutput(std::string Output) { Out << Output; }
+void ModelDataCollector::setOutput(std::string Output) {
+  if (Out)
+    *Out << Output;
+}
 
 std::string ModelDataCollector::getIRFileName(StringRef Key) {
   if (IRFileNames.count(Key))

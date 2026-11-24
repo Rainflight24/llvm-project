@@ -78,6 +78,11 @@ static codegen::RegisterCodeGenFlags CFG;
 // In "llvm/lib/Passes/PassBuilderPipelines.cpp"
 extern cl::opt<bool> UseProteanInitialPasses;
 
+// In "llvm/lib/Analysis/ProteanCollectFeatures.cpp"
+namespace llvm {
+extern cl::opt<bool> ProteanFeatureDump;
+} // namespace llvm
+
 // The OptimizationList is automatically populated with registered Passes by the
 // PassNameParser.
 static cl::list<const PassInfo *, bool, PassNameParser> PassList(cl::desc(
@@ -878,6 +883,13 @@ int main(int argc, char **argv) {
           LLVM_DEBUG(dbgs() << M->getSourceFileName()
                             << " had no override specified\n");
         }
+      }
+
+      if (OptType != PassOptimizer::SA) {
+        // When SA is inactive, don't try to share features.
+        UseProteanInitialPasses = false;
+        // When dumping is active, collect features after output is written.
+        TrailingFeatureCollection = ProteanFeatureDump;
       }
 
       if (OptType == PassOptimizer::Recipe) {
